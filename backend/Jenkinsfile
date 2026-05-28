@@ -1,98 +1,61 @@
 pipeline {
     agent any
 
-    environment {
-        PATH = "/usr/local/bin:${env.PATH}"
+    parameters {
+        choice(name: 'TEST_TYPE', choices: ['api', 'ui', 'all'], description: 'Select test type')
+        choice(name: 'BROWSER', choices: ['chromium', 'firefox', 'webkit'], description: 'Select browser')
     }
-parameters {
-    choice(name: 'TEST_TYPE', choices: ['api', 'ui', 'all'], description: 'Select test type')
-    choice(name: 'BROWSER', choices: ['chromium', 'firefox', 'webkit'], description: 'Select browser')
-}
+
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
                 git branch: 'main',
-                url: 'https://github.com/annikasu8/playwright-banking-tests.git'
+                url: 'YOUR_GITHUB_URL'
             }
         }
 
         stage('Install Dependencies') {
             steps {
                 sh '''
-                    rm -rf node_modules package-lock.json
                     npm install
-                    npm install -D @playwright/test
+                    npx playwright install
                 '''
             }
         }
 
-        stage('Install Playwright Browsers') {
-            steps {
-                sh 'npx playwright install chromium'
-            }
-        }
-
-        stage('Run API Tests') {
-            steps {
-                sh '''
-                    cd backend
-                    JENKINS_NODE_COOKIE=dontKillMe nohup node server.js > server.log 2>&1 &
-                    sleep 5
-                    cd ..
-
-                    npx playwright test tests/api --workers=4
-                '''
-            }
-        }
-stage('Run UI Tests') {
-            steps {
-                sh '''
-                    cd backend
-                    JENKINS_NODE_COOKIE=dontKillMe nohup node server.js > server.log 2>&1 &
-                    sleep 5
-                    cd ..
-
-                    npx playwright test tests/ui --headed --workers=4
-                '''
-            }
-        }
         stage('Run Tests') {
-    steps {
-        sh '''
-            cd backend
-            JENKINS_NODE_COOKIE=dontKillMe nohup node server.js > server.log 2>&1 &
-            sleep 5
-            cd ..
-
-            if [ "$TEST_TYPE" = "api" ]; then
-                npx playwright test tests/api --project=$BROWSER --workers=1
-            elif [ "$TEST_TYPE" = "ui" ]; then
-                npx playwright test tests/ui --project=$BROWSER --workers=1
-            else
-                npx playwright test --project=$BROWSER --workers=1
-            fi
-        '''
-    }
-}
-        stage('Generate HTML Report') {
             steps {
-                sh 'npx playwright show-report --host 0.0.0.0 &'
+                sh '''
+                    cd backend
+                    JENKINS_NODE_COOKIE=dontKillMe nohup node server.js > server.log 2>&1 &
+                    sleep 5
+                    cd ..
+
+                    if [ "$TEST_TYPE" = "api" ]; then
+                        npx playwright test tests/api --project=$BROWSER --workers=1
+                    elif [ "$TEST_TYPE" = "ui" ]; then
+                        npx playwright test tests/ui --project=$BROWSER --workers=1
+                    else
+                        npx playwright test --project=$BROWSER --workers=1
+                    fi
+                '''
             }
         }
     }
 
     post {
         always {
-            echo 'Pipeline completed!'
-        }
+            archiveArtifacts artifacts: 'playwright-report/**', allowEmptyArchive: true
 
-        success {
-            echo '✅ All tests passed!'
-        }
-
-        failure {
-            echo '❌ Some tests failed.'
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'playwright-report',
+                reportFiles: 'index.html',
+                reportName: 'Playwright Report'
+            ])
         }
     }
 }
