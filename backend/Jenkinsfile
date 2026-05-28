@@ -1,0 +1,66 @@
+pipeline {
+    agent any
+
+    environment {
+        PATH = "/usr/local/bin:${env.PATH}"
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main',
+                url: 'https://github.com/annikasu8/playwright-banking-tests.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                    rm -rf node_modules package-lock.json
+                    npm install
+                    npm install -D @playwright/test
+                '''
+            }
+        }
+
+        stage('Install Playwright Browsers') {
+            steps {
+                sh 'npx playwright install chromium'
+            }
+        }
+
+        stage('Run API Tests') {
+            steps {
+                sh '''
+                    cd backend
+                    JENKINS_NODE_COOKIE=dontKillMe nohup node server.js > server.log 2>&1 &
+                    sleep 5
+                    cd ..
+
+                    npx playwright test tests/api --workers=1
+                '''
+            }
+        }
+
+        stage('Generate HTML Report') {
+            steps {
+                sh 'npx playwright show-report --host 0.0.0.0 &'
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Pipeline completed!'
+        }
+
+        success {
+            echo '✅ All tests passed!'
+        }
+
+        failure {
+            echo '❌ Some tests failed.'
+        }
+    }
+}
