@@ -4,7 +4,10 @@ pipeline {
     environment {
         PATH = "/usr/local/bin:${env.PATH}"
     }
-
+parameters {
+    choice(name: 'TEST_TYPE', choices: ['api', 'ui', 'all'], description: 'Select test type')
+    choice(name: 'BROWSER', choices: ['chromium', 'firefox', 'webkit'], description: 'Select browser')
+}
     stages {
 
         stage('Checkout Code') {
@@ -54,6 +57,24 @@ stage('Run UI Tests') {
                 '''
             }
         }
+        stage('Run Tests') {
+    steps {
+        sh '''
+            cd backend
+            JENKINS_NODE_COOKIE=dontKillMe nohup node server.js > server.log 2>&1 &
+            sleep 5
+            cd ..
+
+            if [ "$TEST_TYPE" = "api" ]; then
+                npx playwright test tests/api --project=$BROWSER --workers=1
+            elif [ "$TEST_TYPE" = "ui" ]; then
+                npx playwright test tests/ui --project=$BROWSER --workers=1
+            else
+                npx playwright test --project=$BROWSER --workers=1
+            fi
+        '''
+    }
+}
         stage('Generate HTML Report') {
             steps {
                 sh 'npx playwright show-report --host 0.0.0.0 &'
