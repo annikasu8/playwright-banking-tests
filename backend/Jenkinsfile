@@ -38,11 +38,22 @@ pipeline {
                     sleep 5
                     cd ..
 
-                    npx playwright test tests/api --workers=1
+                    npx playwright test tests/api --workers=4
                 '''
             }
         }
+stage('Run UI Tests') {
+            steps {
+                sh '''
+                    cd backend
+                    JENKINS_NODE_COOKIE=dontKillMe nohup node server.js > server.log 2>&1 &
+                    sleep 5
+                    cd ..
 
+                    npx playwright test tests/ui --headed --workers=4
+                '''
+            }
+        }
         stage('Generate HTML Report') {
             steps {
                 sh 'npx playwright show-report --host 0.0.0.0 &'
