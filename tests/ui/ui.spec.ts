@@ -22,7 +22,7 @@ test.describe('Banking App - UI Tests', () => {
   // ============================================
   // Test 2: Successful login
   // ============================================
-  test('alice can login with correct credentials', async ({ page }) => {
+  test('@smoke alice can login with correct credentials', async ({ page }) => {
     await page.getByTestId('username-input').fill('alice');
     await page.getByTestId('password-input').fill('alice123');
     await page.getByTestId('login-btn').click();
