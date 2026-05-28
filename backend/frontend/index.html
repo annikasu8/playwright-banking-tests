@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Banking App</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, sans-serif; }
+    body { background: #f0f2f5; margin: 0; padding: 20px; }
+    .container { max-width: 500px; margin: 50px auto; background: white;
+                 border-radius: 12px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h1 { color: #1a73e8; margin-top: 0; }
+    h2 { color: #333; }
+    input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd;
+            border-radius: 6px; font-size: 14px; }
+    button { width: 100%; padding: 12px; background: #1a73e8; color: white;
+             border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin: 8px 0; }
+    button:hover { background: #1557b0; }
+    .error { color: #d93025; margin: 10px 0; }
+    .success { color: #1e8e3e; margin: 10px 0; }
+    .balance { font-size: 32px; color: #1e8e3e; font-weight: bold; margin: 10px 0; }
+    .hidden { display: none; }
+    .transaction { padding: 10px; border-bottom: 1px solid #eee; }
+    .out { color: #d93025; } .in { color: #1e8e3e; }
+    hr { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <div class="container" id="loginSection">
+    <h1>🏦 Banking App</h1>
+    <p>Login to your account</p>
+    <input id="username" placeholder="Username (try: alice)" data-testid="username-input"/>
+    <input id="password" type="password" placeholder="Password (try: alice123)" data-testid="password-input"/>
+    <button id="loginBtn" data-testid="login-btn">Login</button>
+    <div class="error" id="loginError" data-testid="login-error"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="container hidden" id="dashboardSection">
+    <h1>Welcome, <span id="userName" data-testid="user-name"></span>!</h1>
+    <div class="balance">₹<span id="balance" data-testid="balance">0</span></div>
+    <button id="logoutBtn" data-testid="logout-btn" style="background:#5f6368;">Logout</button>
+    <hr/>
+    <h2>💸 Transfer Money</h2>
+    <input id="recipient" placeholder="To (e.g., bob)" data-testid="recipient-input"/>
+    <input id="amount" type="number" placeholder="Amount" data-testid="amount-input"/>
+    <input id="note" placeholder="Note (optional)" data-testid="note-input"/>
+    <button id="transferBtn" data-testid="transfer-btn">Send Money</button>
+    <div id="transferMessage" data-testid="transfer-message"></div>
+    <hr/>
+    <h2>📋 Recent Transactions</h2>
+    <div id="transactionsList" data-testid="transactions-list"></div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3001';
+    let token = null;
+    let currentUser = null;
+
+    const loginSection = document.getElementById('loginSection');
+    const dashboardSection = document.getElementById('dashboardSection');
+
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('loginError');
+      errorEl.textContent = '';
+      try {
+        const res = await fetch(`${API_URL}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok) { errorEl.textContent = data.error || 'Login failed'; return; }
+        token = data.token; currentUser = data;
+        document.getElementById('userName').textContent = data.name;
+        loginSection.classList.add('hidden');
+        dashboardSection.classList.remove('hidden');
+        await loadBalance(); await loadTransactions();
+      } catch (err) { errorEl.textContent = 'Network error - is API running?'; }
+    });
+
+    async function loadBalance() {
+      const res = await fetch(`${API_URL}/api/balance`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      document.getElementById('balance').textContent = data.balance.toLocaleString();
+    }
+
+    async function loadTransactions() {
+      const res = await fetch(`${API_URL}/api/transactions`, { headers: { Authorization: `Bearer ${token}` } });
+      const txns = await res.json();
+      const list = document.getElementById('transactionsList');
+      if (txns.length === 0) { list.innerHTML = '<p style="color:#666;">No transactions yet</p>'; return; }
+      list.innerHTML = txns.slice(0, 5).map(t => {
+        const isOut = t.from === currentUser.username;
+        const sign = isOut ? '-' : '+';
+        const other = isOut ? t.to : t.from;
+        const date = new Date(t.timestamp).toLocaleString();
+        return `<div class="transaction"><div class="${isOut ? 'out' : 'in'}">${sign}₹${t.amount} ${isOut ? 'to' : 'from'} <strong>${other}</strong></div><small style="color:#666;">${t.note || '(no note)'} • ${date}</small></div>`;
+      }).join('');
+    }
+
+    document.getElementById('transferBtn').addEventListener('click', async () => {
+      const to = document.getElementById('recipient').value;
+      const amount = Number(document.getElementById('amount').value);
+      const note = document.getElementById('note').value;
+      const msg = document.getElementById('transferMessage');
+      msg.textContent = ''; msg.className = '';
+      try {
+        const res = await fetch(`${API_URL}/api/transfer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ to, amount, note })
+        });
+        const data = await res.json();
+        if (!res.ok) { msg.textContent = '❌ ' + (data.error || 'Transfer failed'); msg.className = 'error'; return; }
+        msg.textContent = `✅ Transferred ₹${amount} to ${to}!`; msg.className = 'success';
+        document.getElementById('recipient').value = '';
+        document.getElementById('amount').value = '';
+        document.getElementById('note').value = '';
+        await loadBalance(); await loadTransactions();
+      } catch (err) { msg.textContent = 'Network error'; msg.className = 'error'; }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch(`${API_URL}/api/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      token = null; currentUser = null;
+      dashboardSection.classList.add('hidden');
+      loginSection.classList.remove('hidden');
+      document.getElementById('username').value = '';
+      document.getElementById('password').value = '';
+      document.getElementById('loginError').textContent = '';
+    });
+  </script>
+
+</body>
+</html>
